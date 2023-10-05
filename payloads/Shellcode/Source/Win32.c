@@ -20,6 +20,28 @@ SEC( text, B ) UINT_PTR LdrModulePeb( UINT_PTR hModuleHash )
     return INVALID_HANDLE_VALUE;
 }
 
+SEC( text, B ) PFULLLDR_DATA_TABLE_ENTRY LdrModulePebDTE( UINT_PTR hModuleHash )
+{
+    PLDR_DATA_TABLE_ENTRY pModule      = ( PLDR_DATA_TABLE_ENTRY ) ( ( PPEB ) PPEB_PTR )->Ldr->InMemoryOrderModuleList.Flink;
+    PLDR_DATA_TABLE_ENTRY pFirstModule = pModule;
+
+    do
+    {
+        DWORD ModuleHash = HashString( pModule->FullDllName.Buffer, pModule->FullDllName.Length );
+
+        if ( ModuleHash == hModuleHash ) {
+#ifdef _WIN64
+            return (PBYTE)pModule-0x10;
+#else
+            return (PBYTE)pModule - 0x8;
+#endif
+        }
+        pModule = ( PLDR_DATA_TABLE_ENTRY ) pModule->Reserved1[ 0 ];
+    } while ( pModule && pModule != pFirstModule );
+
+    return NULL;
+}
+
 SEC( text, B ) PVOID LdrFunctionAddr( UINT_PTR Module, UINT_PTR FunctionHash )
 {
     PIMAGE_NT_HEADERS       ModuleNtHeader          = NULL;

