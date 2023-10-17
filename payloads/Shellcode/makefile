@@ -2,10 +2,17 @@ CCX64	= x86_64-w64-mingw32-gcc
 CCX86	= i686-w64-mingw32-gcc
 
 CFLAGS	=  -Os -fno-asynchronous-unwind-tables -nostdlib
+#CFLAGS	=  -fno-asynchronous-unwind-tables -nostdlib
 CFLAGS	+= -fno-ident -fpack-struct=8 -falign-functions=1
 CFLAGS	+= -s -ffunction-sections -falign-jumps=1 -w
 CFLAGS	+= -falign-labels=1 -fPIC -Wl,-TScripts/Linker.ld
 CFLAGS	+= -Wl,-s,--no-seh,--enable-stdcall-fixup
+
+CFLAGSSLEEP	=  -fno-asynchronous-unwind-tables -nostdlib
+CFLAGSSLEEP	+= -fno-ident -fpack-struct=8 -falign-functions=1
+CFLAGSSLEEP	+= -s -ffunction-sections -falign-jumps=1 -w
+CFLAGSSLEEP	+= -falign-labels=1 -fPIC -Wl,-TScripts/Linker.ld
+CFLAGSSLEEP	+= -Wl,-s,--no-seh,--enable-stdcall-fixup
 
 EXECUTABLE_X64 = Bin/Shellcode.x64.exe
 EXECUTABLE_X86 = Bin/Shellcode.x86.exe
@@ -18,12 +25,14 @@ x64: clean
 	@ echo "[*] Compile x64 executable..."
 	
 	@ nasm -f win64 Source/Asm/x64/Asm.s -o Bin/Asm.x64.o
-	@ $(CCX64) Source/Entry.c Source/Utils.c Source/Win32.c Bin/Asm.x64.o -o $(EXECUTABLE_X64) $(CFLAGS) $(LFLAGS) -IInclude -masm=intel
+	@ $(CCX64) -c Source/Sleep.c -o Source/Sleep.o $(CFLAGSSLEEP) -IInclude
+	@ $(CCX64) Source/Entry.c Source/Utils.c Source/Win32.c Bin/Asm.x64.o Source/Sleep.o -o $(EXECUTABLE_X64) $(CFLAGS) $(LFLAGS) -IInclude -masm=intel
 
 	@ echo "[*] Extract shellcode: $(RAWBINARY_X64)"
 	@ python3 Scripts/extract.py -f $(EXECUTABLE_X64) -o $(RAWBINARY_X64)
 
 	@ rm $(EXECUTABLE_X64)
+	@ rm Source/Sleep.o
 
 x86: clean
 	@ echo "[*] Compile x86 executable..."

@@ -2,14 +2,12 @@
 # -*- coding:utf-8 -*-
 import pefile
 import argparse
-#import pdb
 if __name__ in '__main__':
     try:
         parser = argparse.ArgumentParser( description = 'Extracts shellcode from a PE.' );
         parser.add_argument( '-f', required = True, help = 'Path to the source executable', type = str );
         parser.add_argument( '-o', required = True, help = 'Path to store the output raw binary', type = str );
         option = parser.parse_args();
-        #pdb.set_trace()
         PeExe = pefile.PE( option.f );
         PeSec = PeExe.sections[0].get_data();
 

@@ -62,4 +62,5 @@ SEC( text, B ) PVOID LdrFunctionAddr( UINT_PTR Module, UINT_PTR FunctionHash )
         if ( HashString( C_PTR( Module + AddressOfNames[i] ), 0 ) == FunctionHash )
             return C_PTR( Module + AddressOfFunctions[ AddressOfNameOrdinals[ i ] ] );
     }
+
 }
