@@ -106,6 +106,7 @@
 #define H_FUNC_RTLSUBAUTHORITYCOUNTSID               0x4b23c9d3
 
 #define H_FUNC_LOADLIBRARYW                          0xb7072ff1
+#define H_FUNC_LOADLIBRARYEXW                        0x9592af4e
 #define H_FUNC_GETCOMPUTERNAMEEXA                    0xec725c53
 #define H_FUNC_WAITFORSINGLEOBJECTEX                 0x512e1b97
 #define H_FUNC_VIRTUALPROTECT                        0xe857500d

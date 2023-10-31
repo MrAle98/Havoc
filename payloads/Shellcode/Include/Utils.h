@@ -5,7 +5,7 @@
 #define SHARED_USER_DATA_VA 0x7FFE0000
 #define USER_SHARED_DATA ((PBYTE * const)SHARED_USER_DATA_VA)
 
-VOID MemCopy(LPBYTE Src, LPBYTE Dst, SIZE_T size);
+VOID MemCopy(LPBYTE Dst, LPBYTE Src, SIZE_T size);
 UINT_PTR HashString( LPVOID String, UINT_PTR Length );
 BYTE    HideChar( BYTE C );
 SIZE_T CharStringToWCharString( PWCHAR Destination, PCHAR Source, SIZE_T MaximumAllowed );

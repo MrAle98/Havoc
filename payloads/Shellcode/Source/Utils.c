@@ -1,9 +1,9 @@
 #include <Utils.h>
 #include <Macro.h>
 
-SEC(text,B) VOID MemCopy(LPBYTE Src, LPBYTE Dst, SIZE_T size){
+SEC(text,B) VOID MemCopy(LPBYTE Dst, LPBYTE Src, SIZE_T size){
     for(int i=0;i<size;i++){
-        Src[i] = Dst[i];
+        Dst[i] = Src[i];
     }
 }
 SEC( text, B ) UINT_PTR HashString( LPVOID String, UINT_PTR Length )

