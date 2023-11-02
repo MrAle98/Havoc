@@ -1,0 +1,11 @@
+{
+    "go.toolsEnvVars": {
+        "GOOS": "linux"
+    },
+    "go.delveConfig": {
+        "dlvLoadConfig": {
+            "maxStringLen": 6000,
+            "maxArrayValues": 1000,
+        },
+    }
+}
