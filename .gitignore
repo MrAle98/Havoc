@@ -1,3 +1,5 @@
+#ignore teamserver debug exe
+**/__debug_bin*
 # ignore .idea
 */.idea/
 **/.idea/
