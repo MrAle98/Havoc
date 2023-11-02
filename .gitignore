@@ -4,7 +4,7 @@
 # ignore cmake generated stuff
 Client/Build
 **/cmake-build-debug/
-
+**/cmake-build-release/
 # dont commit your loot
 Teamserver/data/loot/
 
