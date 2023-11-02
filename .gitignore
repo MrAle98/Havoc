@@ -1,6 +1,6 @@
 # ignore .idea
 */.idea/
-
+**/.idea/
 # ignore cmake generated stuff
 Client/Build
 **/cmake-build-debug/
