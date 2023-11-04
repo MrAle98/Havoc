@@ -71,12 +71,12 @@ section .text$F
         sub r10, 1
         cmp r10,0
         jle JUMPFUNC
-        mov rsi, [rbx+0x30]         ; fifth arg
-        mov [rsp+0x28], rsi
+        mov r11, [rbx+0x30]         ; fifth arg
+        mov [rsp+0x28], r11
         sub r10,1
         cmp r10,0
         jle JUMPFUNC
-        mov rsi, [rbx + 0x38]       ;sixth arg
-        mov [rsp+0x30], rsi
+        mov r11, [rbx + 0x38]       ;sixth arg
+        mov [rsp+0x30], r11
 JUMPFUNC:
         jmp rax

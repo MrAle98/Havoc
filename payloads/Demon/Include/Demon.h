@@ -55,6 +55,15 @@ typedef struct
     DWORD TxtSize;
 } KAYN_ARGS, *PKAYN_ARGS;
 
+typedef struct _PAGEPROTECT_PARAM
+{
+    PVOID SecMemory;
+    SIZE_T SecMemorySize;
+    DWORD Protection;
+    DWORD OldProtection;
+
+}PAGEPROTECT_PARAM,*PPAGEPROTECT_PARAM;
+
 // TODO: remove all variables that are not switched/changed after some time
 typedef struct
 {
@@ -81,6 +90,9 @@ typedef struct
     struct {
         PVOID ModuleBase;
         DWORD ModuleSize;
+        PPAGEPROTECT_PARAM PageProtectParams;
+        DWORD NumberOfSections;
+        DWORD headerSize;
         USTRING KeyStompedModule;
         USTRING Rc4StompedModule;
         USTRING Rc4PayloadModule;

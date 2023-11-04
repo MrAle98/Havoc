@@ -68,8 +68,8 @@ typedef struct
         PVOID       *BaseAddress;
         ULONG_PTR   ZeroBits;
         PSIZE_T     RegionSize;
-        ULONG       AllocationType;
-        ULONG       Protect;
+        ULONG_PTR       AllocationType;
+        ULONG_PTR       Protect;
     } NTALLOCATEVIRTUALMEMORYARGS;
 
     struct _NTPROTECTVIRTUALMEMORY_ARGS{
@@ -78,7 +78,7 @@ typedef struct
         HANDLE  ProcessHandle;
         PVOID   *BaseAddress;
         PSIZE_T RegionSize;
-        ULONG   NewProtect;
+        ULONG_PTR   NewProtect;
         PULONG  OldProtect;
     } NTPROTECTVIRTUALMEMORY_ARGS;
 
