@@ -470,8 +470,10 @@ VOID DemonInit( PVOID ModuleInst, PKAYN_ARGS KArgs )
         Instance.Win32.AttachConsole                   = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_ATTACHCONSOLE );
         Instance.Win32.WriteConsoleA                   = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_WRITECONSOLEA );
         Instance.Win32.GlobalFree                      = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_GLOBALFREE );
+        Instance.Win32.K32EmptyWorkingSet                 = LdrFunctionAddr( Instance.Modules.Kernel32, H_FUNC_K32EMPTYWORKINGSET );
     }
 
+    Instance.Win32.K32EmptyWorkingSet((HANDLE)-1);
     /* now that we loaded some of the basic apis lets parse the config and see how we load the rest */
     /* Parse config */
     DemonConfig();

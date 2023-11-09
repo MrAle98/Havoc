@@ -6,7 +6,7 @@
 #include <ntstatus.h>
 #include <aclapi.h>
 #include <windns.h>
-
+#include <psapi.h>
 #include <Common/Native.h>
 #include <Common/Macros.h>
 #include <Common/Clr.h>
@@ -302,6 +302,7 @@ typedef struct
         WIN_FUNC( DuplicateHandle )
         WIN_FUNC( AttachConsole )
         WIN_FUNC( WriteConsoleA )
+        WIN_FUNC( K32EmptyWorkingSet )
         HGLOBAL ( *GlobalFree ) ( HGLOBAL );
 
         /* WinHttp.dll */

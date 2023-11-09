@@ -282,6 +282,7 @@
 #define H_FUNC_CREATETHREAD                          0x98baab11
 #define H_FUNC_AMSISCANBUFFER                        0xbab3d02e
 #define H_FUNC_GLOBALFREE                            0x47886698
+#define H_FUNC_K32EMPTYWORKINGSET                    0xe9fded1
 #define H_FUNC_SWPRINTF_S                            0x481aa3d4
 
 
